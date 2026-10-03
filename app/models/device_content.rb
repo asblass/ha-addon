@@ -4,6 +4,7 @@ class DeviceContent
     home_assistant_api: nil,
     calendar_feed: CalendarFeed.new,
     timezone: nil,
+    time_format: nil,
     current_time: nil,
     days: 5,
     include_precip: true,
@@ -28,12 +29,14 @@ class DeviceContent
   )
     home_assistant_api ||= HomeAssistantApi.new(wind_gust_threshold_mph: wind_gust_threshold_mph, account: device&.location&.account)
     current_time ||= Time.now.utc.in_time_zone(home_assistant_api.time_zone)
+    time_format = DeviceTimeFormatter.normalize(time_format || device&.location&.account&.time_format)
 
     out = {}
     out[:top_left] = []
     out[:top_right] = []
     out[:weather_status] = []
     out[:current_time] = current_time
+    out[:time_format] = time_format
 
     if home_assistant_api.states_healthy?
       out[:current_temperature] = home_assistant_api.feels_like_temperature
@@ -164,7 +167,7 @@ class DeviceContent
           # "morning" reading regardless of which hours the weather row displays.
           hourly_weather_events = weather_events.select(&:weather_hourly?)
           displayed_weather_events = hourly_weather_events.select { |e| weather_row_hours.include?(e.starts_at.hour) }
-          weather_row_data = include_temperature ? displayed_weather_events.map { |e| e.as_json(date: date.to_date) } : []
+          weather_row_data = include_temperature ? displayed_weather_events.map { |e| e.as_json(date: date.to_date, time_format: time_format) } : []
 
           if clothing_forecast && clothing_threshold
             daily_weather = events[:daily].find(&:weather?)
@@ -217,8 +220,8 @@ class DeviceContent
           day_name: day_name,
           date: date.to_date,
           show_daily: show_daily,
-          daily: events[:daily].reject(&:banner?).map { |e| e.as_json(date: date.to_date) },
-          periodic: periodic_events.reject(&:banner?).map { |e| e.as_json(date: date.to_date) },
+          daily: events[:daily].reject(&:banner?).map { |e| e.as_json(date: date.to_date, time_format: time_format) },
+          periodic: periodic_events.reject(&:banner?).map { |e| e.as_json(date: date.to_date, time_format: time_format) },
           weather_row: weather_row_data,
           clothing: clothing_data
         }

@@ -165,6 +165,33 @@ class DeviceEventTest < Minitest::Test
     assert_equal("5:01p", event.time)
   end
 
+  def test_24_hour_format_is_compact_and_has_no_period_marker
+    event = DeviceEvent.new(
+      starts_at: 1621288800,
+      ends_at: 1621292400,
+      summary: "foo",
+      timezone: "America/Chicago",
+      time_format: "24h"
+    )
+
+    assert_equal "17 - 18", event.time
+    assert_equal "17", event.start_time
+    assert_equal "17:00 - 18:00", event.full_time
+    assert_equal "17:00", event.full_start_time
+  end
+
+  def test_24_hour_format_includes_minutes_when_needed
+    event = DeviceEvent.new(
+      starts_at: 1621288860,
+      ends_at: 1621292460,
+      summary: "foo",
+      timezone: "America/Chicago",
+      time_format: "24h"
+    )
+
+    assert_equal "17:01 - 18:01", event.time
+  end
+
   def test_one_hour_event_in_afternoon_at_top_of_hour
     start = 1621288800 # 5pm Central
     finish = 1621292400 # 6pm Central
@@ -257,6 +284,26 @@ class DeviceEventTest < Minitest::Test
     event = DeviceEvent.new(starts_at: "2023-11-01", ends_at: "2023-11-08", summary: " ‍ meeting")
 
     assert_equal("meeting", event.summary)
+  end
+
+  def test_preserves_german_letters_and_sharp_s
+    event = DeviceEvent.new(
+      starts_at: "2023-11-01",
+      ends_at: "2023-11-02",
+      summary: "ä ö ü Ä Ö Ü ß"
+    )
+
+    assert_equal "ä ö ü Ä Ö Ü ß", event.summary
+  end
+
+  def test_preserves_combining_marks
+    event = DeviceEvent.new(
+      starts_at: "2023-11-01",
+      ends_at: "2023-11-02",
+      summary: "Cafe\u0301"
+    )
+
+    assert_equal "Cafe\u0301", event.summary
   end
 
   def test_daily_summary_count
@@ -390,6 +437,36 @@ class DeviceEventTest < Minitest::Test
     )
 
     assert_equal("5p", event.as_json[:start_time])
+  end
+
+  def test_as_json_uses_requested_time_format_and_exposes_numeric_hour
+    event = DeviceEvent.new(
+      starts_at: 1621288800,
+      ends_at: 1621288800,
+      summary: "foo",
+      timezone: "America/Chicago"
+    )
+
+    payload = event.as_json(time_format: "24h")
+
+    assert_equal "17", payload[:start_time]
+    assert_equal 17, payload[:start_hour]
+    refute_match(/[ap]/, payload[:time_html])
+  end
+
+  def test_as_json_exposes_noon_hour_independent_of_time_format
+    event = DeviceEvent.new(
+      starts_at: 1621270800,
+      ends_at: 1621270800,
+      summary: "72°",
+      id: "_ha_weather_hour_noon",
+      timezone: "America/Chicago"
+    )
+
+    payload = event.as_json(time_format: "24h")
+
+    assert_equal "12", payload[:start_time]
+    assert_equal 12, payload[:start_hour]
   end
 
   def test_hidden_for_returns_false_without_description

@@ -4,6 +4,7 @@ class StatusController < ApplicationController
   layout "application"
 
   def index
+    @time_format = Account.first&.time_format || "12h"
     @state = UptimeCheck.current_state
     @uptime_windows = UptimeCheck::WINDOWS.map { |label, duration| [label, UptimeCheck.uptime_percentage(duration)] }
     @daily_summary = UptimeCheck.daily_summary(days: 90)

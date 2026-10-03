@@ -509,6 +509,7 @@ class Device < ActiveRecord::Base
         3
       end
     args = {
+      time_format: location&.account&.time_format || "12h",
       days:
         if two_day
           (hide_today_enabled ? 3 : 2)

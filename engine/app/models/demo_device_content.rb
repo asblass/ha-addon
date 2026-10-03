@@ -5,12 +5,15 @@ class DemoDeviceContent
     include_weather_alerts: true, include_air_quality: true, include_temperature: true, temperature_hours: nil,
     use_day_names: false, include_daily_weather: true, weather_row: false, start_time_only: false,
     always_show_today: false, hide_today_after_minutes: 1200, start_offset: 0, clothing_forecast: false, auto_icons: false, event_filters: {},
-    fill_hourly_weather: false, wind_gust_threshold_mph: 20.0, battery_level: nil, charging: false, day_groups_limit: nil, include_minutely: true)
+    fill_hourly_weather: false, wind_gust_threshold_mph: 20.0, battery_level: nil, charging: false, day_groups_limit: nil, include_minutely: true,
+    time_format: "12h")
     current_time ||= Time.now.utc.in_time_zone(timezone)
+    time_format = DeviceTimeFormatter.normalize(time_format)
 
     out = {}
     out[:current_temperature] = "72°"
     out[:current_time] = current_time
+    out[:time_format] = time_format
 
     battery = Device.battery_descriptor(level: battery_level, charging: charging)
     out[:battery] = battery if battery && (battery[:low] || battery[:charging])
@@ -67,7 +70,7 @@ class DemoDeviceContent
     out[:day_groups] = build_day_groups(current_time, timezone, days: days, include_wind: include_wind,
       include_temperature: include_temperature, temperature_hours: temperature_hours, use_day_names: use_day_names, weather_row: weather_row,
       start_offset: start_offset, clothing_forecast: clothing_forecast, fill_hourly_weather: fill_hourly_weather,
-      always_show_today: always_show_today, hide_today_after_minutes: hide_today_after_minutes)
+      always_show_today: always_show_today, hide_today_after_minutes: hide_today_after_minutes, time_format: time_format)
     out[:day_groups] = out[:day_groups].first(day_groups_limit) if day_groups_limit
 
     if event_filters.present?
@@ -133,7 +136,7 @@ class DemoDeviceContent
     }
   end
 
-  def build_day_groups(current_time, timezone, days: 5, include_wind: true, include_temperature: true, temperature_hours: nil, use_day_names: false, weather_row: false, start_offset: 0, clothing_forecast: false, fill_hourly_weather: false, always_show_today: false, hide_today_after_minutes: 1200)
+  def build_day_groups(current_time, timezone, days: 5, include_wind: true, include_temperature: true, temperature_hours: nil, use_day_names: false, weather_row: false, start_offset: 0, clothing_forecast: false, fill_hourly_weather: false, always_show_today: false, hide_today_after_minutes: 1200, time_format: "12h")
     today = current_time.to_date
     tz = ActiveSupport::TimeZone[timezone]
     vacation = DeviceEvent.new(
@@ -182,7 +185,7 @@ class DemoDeviceContent
         weather_events = weather_events
           .select { |e| e.weather_hourly? && weather_row_hours.include?(e.starts_at.hour) }
           .sort_by { |e| e.starts_at.hour }
-        weather_row_data = include_temperature ? weather_events.map { |e| e.as_json(date: date.to_date) } : []
+        weather_row_data = include_temperature ? weather_events.map { |e| e.as_json(date: date.to_date, time_format: time_format) } : []
         clothing_data = clothing_for(weather_events, events[:daily]) if clothing_forecast
       end
 
@@ -205,8 +208,8 @@ class DemoDeviceContent
         day_name: day_name,
         date: date.to_date,
         show_daily: show_daily,
-        daily: events[:daily].map { |e| e.as_json(date: date.to_date) },
-        periodic: periodic_events.reject { |e| e.weather? && !include_temperature }.map { |e| e.as_json(date: date.to_date) },
+        daily: events[:daily].map { |e| e.as_json(date: date.to_date, time_format: time_format) },
+        periodic: periodic_events.reject { |e| e.weather? && !include_temperature }.map { |e| e.as_json(date: date.to_date, time_format: time_format) },
         weather_row: weather_row_data,
         clothing: clothing_data
       }

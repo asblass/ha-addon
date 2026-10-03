@@ -71,6 +71,10 @@ Keep the `/data` volume across restarts — it holds the bundled Postgres databa
 
 ## Configuration
 
+### Account settings
+
+The Settings page includes a configurable time format: 12-hour (`9:30 PM`, the default) or 24-hour (`21:30`).
+
 The following entities can be created in Home Assistant to customize behavior. Icon names are from [Material Design Icons](https://pictogrammers.com/library/mdi/) (without the `mdi-` prefix).
 
 | Entity ID | Default behavior | Description |

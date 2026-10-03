@@ -21,7 +21,7 @@
 
 <% day = @view_object[:day_groups]&.first %>
   <% if day %>
-    <% daily_weather = day[:weather_row]&.find { |w| w[:start_time] == "12p" } || day[:weather_row]&.first %>
+    <% daily_weather = day[:weather_row]&.find { |w| w[:start_hour] == 12 } || day[:weather_row]&.first %>
     <% day_label = (day[:date].to_date == @view_object[:current_time].to_date) ? "Today" : "Tomorrow" %>
     <% only_icons = @view_object.dig(:configuration, "only_show_events_with_icons") == "true" %>
     <% show_times = @view_object.dig(:configuration, "show_event_times") == "true" %>

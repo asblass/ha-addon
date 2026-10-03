@@ -3,6 +3,12 @@
 require "test_helper"
 
 class AccountTest < ActiveSupport::TestCase
+  test "time format defaults to 12-hour" do
+    account = Account.create!(name: "Test")
+
+    assert_equal "12h", account.time_format
+  end
+
   test "support_access? returns true when support_access_at is set" do
     account = Account.create!(name: "Test")
     account.update!(support_access_at: Time.current)

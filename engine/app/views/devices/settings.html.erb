@@ -505,7 +505,7 @@
                 <div class="mt-1 text-sm text-gray-500">
                   Last connected:
                   <% if @device.last_connection_at %>
-                    <%= @device.last_connection_at.in_time_zone(@timezone).strftime("%b %-d %-l:%M %p") %>
+                    <%= @device.last_connection_at.in_time_zone(@timezone).strftime("%b %-d ") %><%= DeviceTimeFormatter.format(@device.last_connection_at.in_time_zone(@timezone), time_format: @device.account&.time_format) %>
                   <% else %>
                     never
                   <% end %>
@@ -543,7 +543,7 @@
                       <tbody>
                         <% @audit_logs.each do |log| %>
                           <tr>
-                            <td class="whitespace-nowrap"><%= log.created_at.in_time_zone(@timezone).strftime("%b %-d %-l:%M:%S%P") %></td>
+                            <td class="whitespace-nowrap"><%= log.created_at.in_time_zone(@timezone).strftime("%b %-d ") %><%= DeviceTimeFormatter.format(log.created_at.in_time_zone(@timezone), time_format: @device.account&.time_format, seconds: true) %></td>
                             <td><code><%= log.event_type %></code></td>
                             <td>
                               <% if log.result_type == "error" %>

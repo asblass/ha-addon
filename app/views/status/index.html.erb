@@ -74,7 +74,8 @@
           <tr>
             <td><i class="mdi <%= status[:icon] %>"></i> <%= status[:name] %></td>
             <td><%= status[:healthy] ? "✓ Healthy" : "✗ Unhealthy" %></td>
-            <td><%= status[:last_fetched_at] ? DateTime.parse(status[:last_fetched_at]).strftime("%b %-d @ %-l:%M:%S %p") : "Never" %></td>
+            <% fetched_at = DateTime.parse(status[:last_fetched_at]) if status[:last_fetched_at] %>
+            <td><%= fetched_at ? "#{fetched_at.strftime("%b %-d @ ")}#{DeviceTimeFormatter.format(fetched_at, time_format: @time_format, seconds: true)}" : "Never" %></td>
           </tr>
         <% end %>
       </tbody>
@@ -156,8 +157,8 @@
               <td><%= event.icon %></td>
               <td><%= event.daily? %></td>
               <td><%= event.summary %></td>
-              <td><%= event.starts_at.strftime("%b %-d @ %-l:%M %p") %></td>
-              <td><%= event.ends_at.strftime("%b %-d @ %-l:%M %p") %></td>
+              <td><%= event.starts_at.strftime("%b %-d @ ") %><%= DeviceTimeFormatter.format(event.starts_at, time_format: @time_format) %></td>
+              <td><%= event.ends_at.strftime("%b %-d @ ") %><%= DeviceTimeFormatter.format(event.ends_at, time_format: @time_format) %></td>
               <td><%= event.id %></td>
               <td><%= event.location %></td>
             </tr>

@@ -5,7 +5,7 @@
 
   <div class="tf-card">
     <%= form_with url: settings_path, method: :patch do |f| %>
-      <div class="grid grid-cols-3 gap-2">
+      <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div>
           <label class="tf-label"><strong>Temperature</strong></label>
           <select name="account[temperature_unit]" class="tf-select">
@@ -26,6 +26,13 @@
             <option value="in" <% if @account.precipitation_unit == "in" %>selected<% end %>>in</option>
             <option value="mm" <% if @account.precipitation_unit == "mm" %>selected<% end %>>mm</option>
             <option value="cm" <% if @account.precipitation_unit == "cm" %>selected<% end %>>cm</option>
+          </select>
+        </div>
+        <div>
+          <label class="tf-label"><strong>Time format</strong></label>
+          <select name="account[time_format]" class="tf-select">
+            <option value="12h" <% if @account.time_format == "12h" %>selected<% end %>>12-hour (9:30 PM)</option>
+            <option value="24h" <% if @account.time_format == "24h" %>selected<% end %>>24-hour (21:30)</option>
           </select>
         </div>
       </div>

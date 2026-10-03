@@ -65,7 +65,7 @@
           <% event = row[:event] %>
           <% calendar = row[:calendar] %>
           <% customization = calendar.customization_for(event.id) %>
-          <% time_text = event.daily? ? "All day" : event.starts_at.strftime("%-l:%M %p") %>
+          <% time_text = event.daily? ? "All day" : DeviceTimeFormatter.format(event.starts_at, time_format: @account.time_format) %>
           <%= render "events/customizable_row",
                 update_url: event_customization_path,
                 hide_url: toggle_omit_event_path,

@@ -73,12 +73,13 @@
 <script>
 (function() {
   var timeZone = <%= ERB::Util.json_escape(@view_object[:current_time].time_zone.tzinfo.name.to_json).html_safe %>;
-  var clockFormatter = new Intl.DateTimeFormat('en-US', {
+  var timeFormat = <%= @view_object[:time_format].to_json %>;
+  var clockFormatter = new Intl.DateTimeFormat(undefined, {
     timeZone: timeZone,
     hour: 'numeric',
     minute: '2-digit',
     second: '2-digit',
-    hour12: true
+    hourCycle: timeFormat === '24h' ? 'h23' : 'h12'
   });
   var dateFormatter = new Intl.DateTimeFormat('en-US', {
     timeZone: timeZone,
@@ -97,7 +98,9 @@
 
   function updateClock() {
     var parts = clockParts();
-    var timeStr = (parts.hour.length < 2 ? ' ' : '') + parts.hour + ':' + parts.minute + parts.dayPeriod.toLowerCase();
+    var timeStr = timeFormat === '24h'
+      ? parts.hour.padStart(2, '0') + ':' + parts.minute
+      : (parts.hour.length < 2 ? ' ' : '') + parts.hour + ':' + parts.minute + parts.dayPeriod.toLowerCase();
     var el = document.getElementById('mira-clock');
     if (el) el.textContent = timeStr;
   }

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 58) do
+ActiveRecord::Schema[8.1].define(version: 59) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -44,6 +44,7 @@ ActiveRecord::Schema[8.1].define(version: 58) do
     t.datetime "support_access_at"
     t.string "temperature_unit", default: "F", null: false
     t.datetime "updated_at", null: false
+    t.string "time_format", default: "12h", null: false
     t.index ["stripe_customer_id"], name: "index_accounts_on_stripe_customer_id", unique: true
     t.index ["stripe_subscription_id"], name: "index_accounts_on_stripe_subscription_id", unique: true
   end

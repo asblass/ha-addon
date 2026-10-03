@@ -11,6 +11,7 @@ class DeviceEvent
     ends_at:,
     summary:,
     timezone: "UTC",
+    time_format: "12h",
     description: nil,
     icon: nil,
     icon_rotation: nil,
@@ -26,8 +27,8 @@ class DeviceEvent
     ical_uid: nil,
     id: SecureRandom.hex
   )
-    @id, @icon, @icon_rotation, @summary, @description, @location, @daily, @timezone, @attachment_image, @wind_gust, @entity_id =
-      id, icon, icon_rotation, summary.gsub(/[^a-zA-Z0-9.\-"\  _°\/\\&:+,?()<>'@#%\u2019]/, ""), description, location, daily, timezone, attachment_image, wind_gust, entity_id
+    @id, @icon, @icon_rotation, @summary, @description, @location, @daily, @timezone, @time_format, @attachment_image, @wind_gust, @entity_id =
+      id, icon, icon_rotation, summary.gsub(/[^\p{L}\p{M}0-9.\-"\  _°\/\\&:+,?()<>'@#%\u2019]/, ""), description, location, daily, timezone, DeviceTimeFormatter.normalize(time_format), attachment_image, wind_gust, entity_id
     @ical_uid = ical_uid
     @yearly_recurring = yearly_recurring
 
@@ -155,16 +156,16 @@ class DeviceEvent
     @air_quality_flag
   end
 
-  def full_start_time
+  def full_start_time(time_format: @time_format)
     start = Time.at(start_i).in_time_zone(@timezone)
-    start.strftime("%-l:%M%P")
+    DeviceTimeFormatter.format(start, time_format: time_format)
   end
 
-  def full_time
+  def full_time(time_format: @time_format)
     start = Time.at(start_i).in_time_zone(@timezone)
 
     if start_i == end_i
-      return start.strftime("%-l:%M%P")
+      return DeviceTimeFormatter.format(start, time_format: time_format)
     end
 
     endtime = Time.at(end_i).in_time_zone(@timezone)
@@ -176,48 +177,41 @@ class DeviceEvent
       end_date = "#{short_weekday_label(endtime)} "
     end
 
-    "#{start_date}#{start.strftime("%-l:%M%P")} - #{end_date}#{endtime.strftime("%-l:%M%P")}"
+    "#{start_date}#{DeviceTimeFormatter.format(start, time_format: time_format)} - #{end_date}#{DeviceTimeFormatter.format(endtime, time_format: time_format)}"
   end
 
-  def start_time
+  def start_time(time_format: @time_format)
     start = Time.at(start_i).in_time_zone(@timezone)
-    label = start.min.positive? ? start.strftime("%-l:%M") : start.strftime("%-l")
-    suffix = start.strftime("%p").gsub("AM", "a").gsub("PM", "p")
-    "#{label}#{suffix}"
+    DeviceTimeFormatter.format(start, time_format: time_format, compact: true)
   end
 
-  def time
-    @time ||= begin
-      start = Time.at(start_i).in_time_zone(@timezone)
+  def time(time_format: @time_format)
+    start = Time.at(start_i).in_time_zone(@timezone)
 
-      if start_i == end_i
-        label = start.min.positive? ? start.strftime("%-l:%M") : start.strftime("%-l")
-        suffix = start.strftime("%p").gsub("AM", "a").gsub("PM", "p")
-
-        return "#{label}#{suffix}"
-      end
-
-      endtime = Time.at(end_i).in_time_zone(@timezone)
-
-      start_label = start.min.positive? ? start.strftime("%-l:%M") : start.strftime("%-l")
-      end_label = endtime.min.positive? ? endtime.strftime("%-l:%M%p") : endtime.strftime("%-l%p")
-
-      start_suffix =
-        if start.strftime("%p") == endtime.strftime("%p") && start.to_date == endtime.to_date
-          ""
-        else
-          start.strftime("%p").gsub("AM", "a").gsub("PM", "p")
-        end
-      start_date = ""
-      end_date = ""
-
-      if start.to_date != endtime.to_date
-        start_date = "#{short_weekday_label(start)} "
-        end_date = "#{short_weekday_label(endtime)} "
-      end
-
-      "#{start_date}#{start_label}#{start_suffix} - #{end_date}#{end_label.gsub("AM", "a").gsub("PM", "p")}"
+    if start_i == end_i
+      return DeviceTimeFormatter.format(start, time_format: time_format, compact: true)
     end
+
+    endtime = Time.at(end_i).in_time_zone(@timezone)
+    start_date = ""
+    end_date = ""
+
+    if start.to_date != endtime.to_date
+      start_date = "#{short_weekday_label(start)} "
+      end_date = "#{short_weekday_label(endtime)} "
+    end
+
+    same_day_and_period = normalize_time_format(time_format) == "12h" &&
+      start.strftime("%p") == endtime.strftime("%p") && start.to_date == endtime.to_date
+
+    start_label = DeviceTimeFormatter.format(start, time_format: time_format, compact: true, include_period: !same_day_and_period)
+    end_label = DeviceTimeFormatter.format(endtime, time_format: time_format, compact: true)
+
+    "#{start_date}#{start_label} - #{end_date}#{end_label}"
+  end
+
+  def start_hour
+    starts_at.hour
   end
 
   def short_weekday_label(value)
@@ -305,17 +299,18 @@ class DeviceEvent
     )
   end
 
-  def as_json(date: nil)
+  def as_json(date: nil, time_format: @time_format)
     {
       icon_text: icon&.start_with?("alpha-") ? icon.delete_prefix("alpha-").upcase : nil,
       icon_class: icon&.start_with?("alpha-") ? nil : icon,
       icon_style: icon_rotation ? "display: inline-block; transform: rotate(#{icon_rotation + 180}deg); " : nil,
       summary: summary(date),
       location: location,
-      time_html: time.to_s,
-      start_time: start_time,
-      full_time: full_time,
-      full_start_time: full_start_time,
+      time_html: time(time_format: time_format),
+      start_time: start_time(time_format: time_format),
+      start_hour: start_hour,
+      full_time: full_time(time_format: time_format),
+      full_start_time: full_start_time(time_format: time_format),
       weather_ranged: weather_ranged?,
       weather: weather?,
       attachment_image: attachment_image,
@@ -327,6 +322,10 @@ class DeviceEvent
   end
 
   private
+
+  def normalize_time_format(time_format)
+    DeviceTimeFormatter.normalize(time_format)
+  end
 
   def compute_daily
     return false if end_i - start_i == 0

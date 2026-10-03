@@ -39,7 +39,7 @@
   <div class="two-day-columns">
     <% @view_object[:day_groups].each do |day| %>
       <div class="two-day-col<%= ' two-day-col-other' unless day[:date].to_date == @view_object[:current_time].to_date %>">
-        <% daily_weather = day[:weather_row]&.find { |w| w[:start_time] == "12p" } || day[:weather_row]&.first %>
+        <% daily_weather = day[:weather_row]&.find { |w| w[:start_hour] == 12 } || day[:weather_row]&.first %>
         <div class="two-day-header">
           <div class="two-day-header-text">
             <div class="two-day-day-name">

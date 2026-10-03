@@ -48,7 +48,7 @@
           <input type="hidden" name="temperature_hours_present" value="1">
           <div class="flex flex-wrap gap-1">
             <% (0..23).each do |hour| %>
-              <% label = Time.new(2000, 1, 1, hour).strftime("%-l%P") %>
+              <% label = DeviceTimeFormatter.format(Time.new(2000, 1, 1, hour), time_format: device.account&.time_format, compact: true) %>
               <%# Each checkbox is scoped INSIDE its own label so the checked
                   styling (has-[:checked]) applies only to this hour. The old
                   peer pattern leaked via the `~` sibling combinator, lighting

@@ -2,10 +2,11 @@
 
 # Settings page for the single-tenant add-on. Only exposes unit preferences,# which are stored on the Account (seeded from the Home Assistant host config).
 class SettingsController < ApplicationController
-  ALLOWED_UNITS = {
+  ALLOWED_SETTINGS = {
     temperature_unit: %w[F C],
     speed_unit: %w[mph kph],
-    precipitation_unit: %w[in mm cm]
+    precipitation_unit: %w[in mm cm],
+    time_format: Account::TIME_FORMATS
   }.freeze
 
   def show
@@ -14,15 +15,15 @@ class SettingsController < ApplicationController
 
   def update
     @account = current_user.accounts.first
-    @account.update(unit_params)
+    @account.update(settings_params)
     redirect_to settings_path, notice: "Settings updated."
   end
 
   private
 
-  def unit_params
-    params.require(:account).permit(:temperature_unit, :speed_unit, :precipitation_unit).to_h.select do |key, value|
-      ALLOWED_UNITS[key.to_sym]&.include?(value)
+  def settings_params
+    params.require(:account).permit(:temperature_unit, :speed_unit, :precipitation_unit, :time_format).to_h.select do |key, value|
+      ALLOWED_SETTINGS[key.to_sym]&.include?(value)
     end
   end
 end
