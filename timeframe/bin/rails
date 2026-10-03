@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+APP_PATH = File.expand_path("../config/application", __dir__)
+require_relative "../config/boot"
+
+if ARGV.first == "test"
+  ENV["DEFAULT_TEST"] ||= "{test,engine/test}/**/*_test.rb"
+end
+
+require "rails/commands"

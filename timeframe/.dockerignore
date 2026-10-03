@@ -1,0 +1,10 @@
+.git
+.bundle
+Gemfile.lock
+tmp
+log
+coverage
+test
+.github
+docker-compose.yml
+config/timeframe.yml

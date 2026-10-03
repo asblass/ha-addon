@@ -1,0 +1,144 @@
+<div id="flash-overlay" data-morph-keep style="display:none; position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 100"></div>
+<style>html { font-size: 44px; }</style>
+<%= render Devices::StatusBarComponent.new(view_object: @view_object) %>
+<% if @view_object.dig(:configuration, "show_current_day") != "false" %>
+  <div style="clear: both; line-height: .7; margin-bottom: 1rem; padding-bottom: .5rem; font-size: 3rem;">
+    <div style="float: left;">
+      <%= @view_object[:current_time].strftime("%A, %b. %-d") %>
+    </div>
+    <div style="float: right; text-align: right;">
+      <%= @view_object[:current_temperature] %>
+    </div>
+    <div>&nbsp;</div>
+  </div>
+  <hr style="margin: 1rem 0 1rem; border: none; background-color: #ccc; color: #ccc; height: 2px;">
+<% end %>
+<%= render Devices::TimelineComponent.new(view_object: @view_object) %>
+
+<% if @view_object[:minutely_precipitation_bars].present? %>
+  <div class="hide-if-empty" style="font-size: 1.75rem; position:absolute; left: 0; right: 0; bottom: 0; z-index: 5">
+    <div style="position: relative">
+      <div style="background:-webkit-gradient(linear,left top,left bottom,color-stop(0%, rgba(255,255,255,0)),color-stop(100%,rgba(255,255,255,1)));position: absolute;left: 0;right: 0; top: -2rem;height: 2rem;z-index: 5;"></div>
+    </div>
+    <%= render Devices::MinutelyPrecipitationComponent.new(view_object: @view_object) %>
+  </div>
+<% end %>
+
+<script>
+(function() {
+  function checkFlash() {
+    var now = new Date();
+    var overlay = document.getElementById('flash-overlay');
+    if (!overlay) return;
+    var sec = now.getSeconds();
+    if (now.getMinutes() === 0 && sec >= 10 && sec < 18) {
+      overlay.style.display = 'block';
+      overlay.style.backgroundColor = ((sec - 10) % 4 < 2) ? 'black' : 'white';
+    } else {
+      overlay.style.display = 'none';
+    }
+  }
+
+  checkFlash();
+  setInterval(checkFlash, 1000);
+
+  <% if @refresh && @device && @device_url %>
+    var knownDeployTime = '<%= DEPLOY_TIME %>';
+    var deviceUrl = '<%= @device_url %>';
+    var clientLogUrl = deviceUrl + '/client_log';
+
+    function tfLog(level, message) {
+      try {
+        fetch(clientLogUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ level: level, message: String(message).slice(0, 2000) }),
+          keepalive: true
+        }).catch(function() {});
+      } catch (e) {}
+    }
+    window.tfLog = tfLog;
+
+    window.addEventListener('error', function(e) {
+      tfLog('error', 'js: ' + (e.message || e.type) + (e.filename ? ' @ ' + e.filename + ':' + e.lineno : ''));
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      tfLog('error', 'promise: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+    });
+
+    var refreshInFlight = false;
+
+    function tfApplyHtml(html) {
+      if (window.tfMorph) {
+        var parsed = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html').body;
+        window.tfMorph(document.body, parsed);
+      } else {
+        document.body.innerHTML = html;
+        tfLog('warn', 'tfMorph missing; full innerHTML swap');
+      }
+      window.syncTimelineTimeColumns();
+    }
+
+    // Fetch the latest rendered content and morph it in. During a backend
+    // (Heroku) outage the request can fail or return an error page; in that case
+    // KEEP the last good content on screen and retry indefinitely with backoff
+    // (ramping up to every 30s) instead of blanking the display or morphing in
+    // an error page.
+    function tfRefresh(attempt) {
+      if (refreshInFlight && attempt === 0) return;
+      refreshInFlight = true;
+      var controller = typeof AbortController === 'function' ? new AbortController() : null;
+      var timeoutId = controller ? setTimeout(function() { controller.abort(); }, 15000) : null;
+      var fetchOptions = { cache: 'no-store' };
+      if (controller) fetchOptions.signal = controller.signal;
+      fetch(deviceUrl + '?layout=false', fetchOptions)
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.text();
+        })
+        .then(function(html) {
+          if (timeoutId) clearTimeout(timeoutId);
+          refreshInFlight = false;
+          if (html && html.trim().length) tfApplyHtml(html);
+        })
+        .catch(function(e) {
+          if (timeoutId) clearTimeout(timeoutId);
+          tfLog('error', 'refresh failed: ' + e);
+          console.error('[Timeframe] Refresh failed:', e);
+          setTimeout(function() { tfRefresh(attempt + 1); }, Math.min(30000, 5000 * (attempt + 1)));
+        });
+    }
+
+    var everConnected = false;
+    var cable = ActionCable.createConsumer();
+    cable.subscriptions.create(
+      { channel: 'DeviceChannel', device_id: '<%= @device.id %>' },
+      {
+        connected: function() {
+          // First connect: the page already has fresh server-rendered content.
+          // Re-connect (after a backend outage dropped the WebSocket): pull the
+          // latest content to catch up on any refreshes broadcast while offline.
+          if (everConnected) {
+            tfLog('info', 'reconnected; refreshing content');
+            tfRefresh(0);
+          }
+          everConnected = true;
+        },
+        disconnected: function() {
+          tfLog('warn', 'websocket disconnected');
+        },
+        received: function(data) {
+          if (data.deploy_time && data.deploy_time.toString() !== knownDeployTime) {
+            tfLog('info', 'deploy changed; full page reload');
+            window.location.reload();
+            return;
+          }
+          if (data.action === 'refresh') {
+            tfRefresh(0);
+          }
+        }
+      }
+    );
+  <% end %>
+})();
+</script>

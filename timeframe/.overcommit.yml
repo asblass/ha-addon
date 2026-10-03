@@ -1,0 +1,16 @@
+PreCommit:
+  HerbAnalyze:
+    enabled: true
+    command: ['bundle', 'exec', 'herb', 'analyze']
+    include: '**/*.erb'
+  StandardRB:
+    enabled: true
+    command: ['bundle', 'exec', 'standardrb']
+  RailsTest:
+    enabled: true
+    command: ['bundle', 'exec', 'rake', 'test']
+
+PrePush:
+  DockerBuild:
+    enabled: true
+    command: ['./script/test-docker-build']

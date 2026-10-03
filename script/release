@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONFIG="config.json"
+CONFIG="timeframe/config.json"
 CHANGELOG="CHANGELOG.md"
 
 # Read current version

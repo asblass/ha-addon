@@ -1,0 +1,24 @@
+<style>
+  html, body { margin: 0; padding: 0; }
+  .charge-reminder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100vw;
+    height: 100vh;
+    box-sizing: border-box;
+    padding: clamp(1rem, 4vmin, 2rem);
+    text-align: center;
+    font-family: 'Lato', sans-serif;
+    color: #000;
+    overflow: hidden;
+  }
+  .charge-reminder i { font-size: clamp(3rem, 22vmin, 12rem); line-height: 1; }
+  .charge-reminder-title { font-size: clamp(1.5rem, 6vmin, 3rem); font-weight: 700; margin-top: 1.5rem; line-height: 1.1; }
+</style>
+
+<div class="charge-reminder">
+  <i class="mdi mdi-battery-alert-variant-outline"></i>
+  <div class="charge-reminder-title">Battery low. Plug in to recharge.</div>
+</div>

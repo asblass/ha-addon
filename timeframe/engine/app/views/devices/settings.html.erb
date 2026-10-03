@@ -1,0 +1,661 @@
+<% content_for :title, @device.name %>
+<%# An admin viewing an account they don't belong to only sees calendar-derived
+    content (device preview/screenshot, upcoming events) when the account has
+    granted support access. Account members always see their own data. %>
+<% hide_support_content = defined?(current_user) && current_user.present? && !@account.users.include?(current_user) && !@account.support_access? %>
+<style>
+  .tf-tab { appearance: none; -webkit-appearance: none; background: transparent; border: 0; border-bottom: 2px solid transparent; color: inherit; cursor: pointer; }
+  .tf-tab-active { border-bottom-color: var(--color-ink); font-weight: 500; }
+</style>
+<div class="flex justify-center">
+  <div class="w-full max-w-2xl lg:max-w-6xl">
+    <%# Host apps (e.g. the cloud dashboard) may inject an "Add Device" link
+        here; the engine renders nothing by default. %>
+    <%= render "devices/add_device_link" %>
+    <% if defined?(current_user) && current_user&.is_admin? %>
+      <% admin_user = @device.account&.users&.first %>
+      <% if admin_user %>
+        <p class="mb-1"><%= link_to "← Back to #{admin_user.email}", admin_account_path(@device.account), class: "text-sm no-underline hover:underline" %></p>
+      <% end %>
+    <% end %>
+    <div class="mb-4 flex items-center">
+      <h3 class="mb-0 text-xl font-semibold" id="device-title"><%= @device.name %></h3>
+      <% if @device.battery_level.present? %>
+        <span class="ml-2 <%= @device.battery_color_class %> text-sm" title="Battery">
+          <i class="mdi mdi-<%= @device.battery_icon %>"></i>
+          <%= @device.battery_level.to_i %>%
+        </span>
+      <% end %>
+      <% unless defined?(current_user) && current_user && !current_user.is_admin? %>
+        <span class="ml-2 text-body-tertiary text-sm"><%= @device.model_name_label %></span>
+      <% end %>
+      <% if defined?(current_user) && current_user&.is_admin? %>
+        <span class="ml-2 tf-badge">ID #<%= @device.id %></span>
+      <% end %>
+    </div>
+
+    <%# Preview + Screenshot %>
+    <%# On large screens the preview sits beside the options card for easier
+        previewing; both stack on small screens. The columns stretch to equal
+        height and the preview card itself is sticky inside its column (a sticky
+        flex item would stretch full-height and never move). %>
+    <div class="lg:flex lg:gap-6">
+    <% unless hide_support_content %>
+    <div class="lg:w-1/2 lg:flex-shrink-0">
+    <% has_screenshot = @device.screenshotted? && @device.cached_image.present? %>
+    <div class="mb-3 rounded-lg border border-ink/10 bg-white lg:sticky lg:top-4" data-controller="tabs" data-tabs-active-class="tf-tab-active">
+      <div class="border-b border-ink/10 px-3 pt-2">
+        <div class="flex gap-1" role="tablist">
+          <button type="button" class="tf-tab px-3 py-2 text-sm" data-tabs-target="tab" data-action="tabs#select" data-panel="preview" data-tabs-default role="tab" aria-selected="true">Preview</button>
+          <% if has_screenshot %>
+            <button type="button" class="tf-tab px-3 py-2 text-sm" data-tabs-target="tab" data-action="tabs#select" data-panel="screenshot" role="tab" aria-selected="false">Screenshot</button>
+          <% end %>
+        </div>
+      </div>
+      <div>
+        <div data-tabs-target="panel" data-panel="preview" role="tabpanel">
+          <div class="p-0">
+            <div id="preview-container" style="position: relative; background: white; overflow: hidden; width: 100%;">
+              <iframe
+                id="preview-iframe"
+                src="<%= preview_frame_account_location_device_path(@account, @location, @device) %>"
+                width="<%= @device.display_width %>"
+                height="<%= @device.display_height %>"
+                scrolling="no"
+                style="border: none; position: absolute; top: 0; left: 0; width: <%= @device.display_width %>px; height: <%= @device.display_height %>px; transform-origin: top left;"
+              ></iframe>
+            </div>
+          </div>
+          <div class="border-t border-ink/10 px-3 py-2">
+            <div class="flex flex-wrap items-center gap-1">
+              <div class="inline-flex h-11 divide-x divide-ink/30 overflow-hidden rounded-md border border-ink/30 text-sm">
+                <button type="button" class="inline-flex h-full items-center justify-center px-3 hover:bg-ink/5" id="preview-prev" title="Previous day">&larr;</button>
+                <button type="button" class="inline-flex h-full items-center justify-center px-3 hover:bg-ink/5" id="preview-today">Today</button>
+                <button type="button" class="inline-flex h-full items-center justify-center px-3 hover:bg-ink/5" id="preview-next" title="Next day">&rarr;</button>
+              </div>
+              <input type="date" class="tf-input-sm h-11 w-auto flex-shrink-0" id="preview-date" value="<%= @preview_now.to_date.to_s %>">
+              <input type="time" class="tf-input-sm h-11 w-auto flex-shrink-0" id="preview-time" value="<%= @preview_now.strftime("%H:%M") %>">
+            </div>
+          </div>
+        </div>
+        <% if has_screenshot %>
+          <div data-tabs-target="panel" data-panel="screenshot" role="tabpanel" hidden>
+            <div class="p-2">
+              <div class="flex items-center justify-center overflow-hidden rounded" style="position: relative; background: #f0f0f0; min-height: 100px;" id="screenshot-container">
+                <% if (@device.reterminal_e1003? || @device.trmnl_x?) && !@device.landscape_template? %>
+                  <%# Portrait panel (display_width x display_height) shown rotated -90deg.
+                      CSS rotation doesn't change the layout box, so wrap the image in an
+                      aspect-ratio box sized for the rotated (landscape) result and center
+                      the rotated image inside it so nothing gets clipped. %>
+                  <% rotated_pct = (@device.display_width.to_f / @device.display_height * 100).round(2) %>
+                  <div style="position: relative; width: 100%; padding-bottom: <%= rotated_pct %>%;">
+                    <img src="<%= screenshot_account_location_device_path(@account, @location, @device) %>" alt="<%= @device.name %>" style="position: absolute; top: 50%; left: 50%; width: <%= rotated_pct %>%; height: auto; transform: translate(-50%, -50%) rotate(-90deg);" id="screenshot-img">
+                  </div>
+                <% else %>
+                  <img src="<%= screenshot_account_location_device_path(@account, @location, @device) %>" alt="<%= @device.name %>" style="max-width: 100%; height: auto;" id="screenshot-img">
+                <% end %>
+                <div id="screenshot-loading" style="display: none; position: absolute; inset: 0; background: #f0f0f0;" class="flex items-center justify-center text-sm text-gray-500">Regenerating screenshot&hellip;</div>
+              </div>
+            </div>
+            <div class="flex items-center justify-between border-t border-ink/10 px-3 py-2">
+              <span class="text-sm text-gray-400" id="screenshot-generated-at">
+                <% generated_at = @device.last_generated_at || @device.cached_image_at %>
+                <% if generated_at %>
+                  Generated <%= (generated_at > 1.minute.ago) ? "<1m" : time_ago_in_words(generated_at) %> ago
+                <% end %>
+              </span>
+              <button type="button" class="tf-btn tf-btn-outline tf-btn-sm" data-regenerate-screenshot>Regenerate</button>
+            </div>
+          </div>
+        <% end %>
+      </div>
+      <script>
+        (function() {
+          var basePath = '<%= preview_frame_account_location_device_path(@account, @location, @device) %>';
+          var dateInput = document.getElementById('preview-date');
+          var timeInput = document.getElementById('preview-time');
+          var prevBtn = document.getElementById('preview-prev');
+          var nextBtn = document.getElementById('preview-next');
+          var todayBtn = document.getElementById('preview-today');
+          var container = document.getElementById('preview-container');
+          var iframe = document.getElementById('preview-iframe');
+          var deviceWidth = <%= @device.display_width %>;
+          var deviceHeight = <%= @device.display_height %>;
+          function updatePreview() {
+            var at = dateInput.value + 'T' + timeInput.value + ':00';
+            iframe.src = basePath + '?at=' + encodeURIComponent(at);
+          }
+          function shiftDate(days) {
+            var d = new Date(dateInput.value + 'T12:00:00');
+            d.setDate(d.getDate() + days);
+            dateInput.value = d.toISOString().slice(0, 10);
+            updatePreview();
+          }
+          prevBtn.addEventListener('click', function() { shiftDate(-1); });
+          nextBtn.addEventListener('click', function() { shiftDate(1); });
+          todayBtn.addEventListener('click', function() {
+            dateInput.value = '<%= @preview_now.to_date.to_s %>';
+            timeInput.value = '<%= @preview_now.strftime("%H:%M") %>';
+            updatePreview();
+          });
+          dateInput.addEventListener('change', updatePreview);
+          timeInput.addEventListener('change', updatePreview);
+          function scaleToFit() {
+            var availWidth = container.parentElement.clientWidth;
+            // Never upscale past the device's native size (on wide layouts like
+            // the cloud settings page the container is far wider than a small
+            // device, which would blow the preview up huge).
+            var scale = Math.min(availWidth / deviceWidth, 1);
+            iframe.style.transform = 'scale(' + scale + ')';
+            container.style.width = Math.floor(deviceWidth * scale) + 'px';
+            container.style.height = Math.floor(deviceHeight * scale) + 'px';
+          }
+          scaleToFit();
+          window.addEventListener('resize', scaleToFit);
+        })();
+      </script>
+      <% if @device.screenshotted? %>
+        <script>
+          (function() {
+            function bindRegenerateButtons() {
+              var buttons = document.querySelectorAll('[data-regenerate-screenshot]');
+              var img = document.getElementById('screenshot-img');
+              var loading = document.getElementById('screenshot-loading');
+              var generatedAt = document.getElementById('screenshot-generated-at');
+              buttons.forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                  buttons.forEach(function(button) {
+                    button.disabled = true;
+                    button.textContent = 'Regenerating\u2026';
+                  });
+                  if (img) img.style.display = 'none';
+                  if (loading) loading.style.display = '';
+                  var newImg = new Image();
+                  newImg.onload = function() {
+                    if (!img) return window.location.reload();
+                    img.src = newImg.src;
+                    img.style.display = '';
+                    loading.style.display = 'none';
+                    buttons.forEach(function(button) {
+                      button.disabled = false;
+                      button.textContent = 'Regenerate';
+                    });
+                    if (generatedAt) generatedAt.textContent = 'Generated <1m ago';
+                  };
+                  newImg.onerror = function() {
+                    if (loading) loading.textContent = 'Failed to regenerate screenshot.';
+                    buttons.forEach(function(button) {
+                      button.disabled = false;
+                      button.textContent = 'Regenerate';
+                    });
+                  };
+                  newImg.src = '<%= screenshot_account_location_device_path(@account, @location, @device) %>' + '?force=true&_=' + Date.now();
+                });
+              });
+            }
+            if (document.readyState === 'loading') {
+              document.addEventListener('DOMContentLoaded', bindRegenerateButtons, { once: true });
+            } else {
+              bindRegenerateButtons();
+            }
+          })();
+        </script>
+      <% end %>
+    </div>
+    </div>
+    <% end %>
+
+    <%# Options. Wrapped in a Turbo Frame and auto-saved on any change so edits
+        (including the layout/template) persist without a hard page refresh. %>
+    <div class="lg:flex-1 lg:min-w-0">
+    <turbo-frame id="device-options">
+    <div class="mb-3 rounded-lg border border-ink/10 bg-white">
+      <%= form_with url: update_options_account_location_device_path(@account, @location, @device), method: :patch, id: "device-options-form" do %>
+        <div class="flex items-center justify-between border-b border-ink/10 px-3 py-2">
+          <span>Options</span>
+          <span class="text-sm text-gray-400" data-save-status aria-live="polite"></span>
+        </div>
+        <div class="p-4">
+        <%# Name %>
+        <label class="mb-1 block text-sm font-bold" for="device-name">Name</label>
+        <input type="text" id="device-name" name="name" value="<%= @device.name %>" class="tf-input-sm mb-3" required>
+
+        <%# Template selection (auto-saves on change) %>
+        <% if @device.template_options %>
+          <label class="mb-1 block text-sm font-bold">Layout</label>
+          <div class="mb-3 flex flex-wrap gap-x-5 gap-y-1">
+            <% @device.template_options.each do |tmpl| %>
+              <% active = @device.active_template == tmpl[:name] %>
+              <label class="inline-flex min-h-11 cursor-pointer items-center gap-2">
+                <%= radio_button_tag "display_template", tmpl[:name], active, class: "tf-check" %>
+                <span><%= tmpl[:label] %></span>
+              </label>
+            <% end %>
+          </div>
+        <% end %>
+
+        <% if @device.active_template.present? %>
+          <%= render "devices/options_fields", device: @device %>
+        <% end %>
+
+        <%# Calendars %>
+        <% if lookup_context.template_exists?("calendars", "devices", true) %>
+          <%= render "devices/calendars" %>
+        <% end %>
+        </div>
+      <% end %>
+    </div>
+    <script>
+      (function() {
+        var form = document.getElementById('device-options-form');
+        if (!form) return;
+        function syncDependents() {
+          form.querySelectorAll('[data-depends-on]').forEach(function(el) {
+            var key = el.getAttribute('data-depends-on');
+            if (!key) return;
+            var cb = form.querySelector('[data-option-key="' + key + '"]');
+            el.style.display = (cb && cb.checked) ? '' : 'none';
+          });
+        }
+        form.querySelectorAll('[data-option-key]').forEach(function(cb) {
+          cb.addEventListener('change', syncDependents);
+        });
+        syncDependents();
+
+        // Keep the heading above the preview tabs and the page <title> in sync
+        // with the name field as it is edited.
+        var nameInput = document.getElementById('device-name');
+        var titleEl = document.getElementById('device-title');
+        if (nameInput && titleEl) {
+          nameInput.addEventListener('input', function() {
+            var v = nameInput.value.trim();
+            titleEl.textContent = v;
+            document.title = (v ? v + ' \u00b7 ' : '') + 'Timeframe';
+          });
+        }
+
+        var status = form.querySelector('[data-save-status]');
+        function setStatus(text) { if (status) { status.textContent = text; } }
+        function flashSaved() {
+          setStatus('Saved');
+          setTimeout(function() { if (status && status.textContent === 'Saved') { setStatus(''); } }, 2000);
+        }
+        function reloadPreview() {
+          var iframe = document.getElementById('preview-iframe');
+          if (iframe) { iframe.src = iframe.src; }
+        }
+        // Auto-save on any change. Changing the layout re-renders the available
+        // options, so it goes through the enclosing Turbo Frame (swaps this pane
+        // in place). Every other change saves via fetch so the field keeps focus
+        // and nothing reloads. No hard page refresh either way.
+        form.addEventListener('change', function(e) {
+          if (form.checkValidity && !form.checkValidity()) { return; }
+          if (e.target && e.target.name === 'display_template') {
+            setStatus('Saving\u2026');
+            form.requestSubmit();
+            return;
+          }
+          setStatus('Saving\u2026');
+          fetch(form.action, {method: 'POST', body: new FormData(form), credentials: 'same-origin', headers: {"Accept": "text/html"}})
+            .then(function(r) {
+              if (!r.ok) { throw new Error("save failed"); }
+              flashSaved();
+              reloadPreview();
+              if (window.tfShowSettingsToast) { window.tfShowSettingsToast(); }
+            })
+            .catch(function() { setStatus('Save failed'); });
+        });
+      })();
+    </script>
+    </turbo-frame>
+    </div>
+    </div>
+    <script>
+      // Bound once (outside the Turbo Frame): a layout change re-renders this
+      // frame (the options for the new template) in place. On the reTerminal
+      // E1003 / TRMNL X the portrait <-> landscape templates also SWAP the
+      // device dimensions, which the already-rendered preview iframe can't
+      // reflect, so for those models reload the whole page (re-showing the save
+      // toast afterwards). Every other device updates the preview in place.
+      if (!window.__tfSettingsSaveBound) {
+        window.__tfSettingsSaveBound = true;
+        var tfReloadOnTemplateChange = <%= (@device.reterminal_e1003? || @device.trmnl_x?) ? "true" : "false" %>;
+        document.addEventListener('turbo:frame-render', function(e) {
+          if (!e.target || e.target.id !== 'device-options') { return; }
+          if (tfReloadOnTemplateChange) {
+            try { sessionStorage.setItem('tfSettingsSaved', '1'); } catch (err) {}
+            window.location.reload();
+            return;
+          }
+          var iframe = document.getElementById('preview-iframe');
+          if (iframe) { iframe.src = iframe.src; }
+          if (window.tfShowSettingsToast) { window.tfShowSettingsToast(); }
+        });
+      }
+    </script>
+
+    <%# Prominent, screen-reader-announced confirmation shown after a settings
+        change. role="status" + aria-live="polite" announces it without stealing
+        focus. %>
+    <div id="settings-toast" role="status" aria-live="polite" aria-atomic="true"
+         class="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-4"
+         style="display: none;">
+      <div class="pointer-events-auto flex max-w-lg items-start gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-green-900 shadow-lg">
+        <span class="mdi mdi-check-circle mt-0.5 text-green-600" aria-hidden="true"></span>
+        <span class="text-sm" id="settings-toast-message"></span>
+        <button type="button" id="settings-toast-close" class="ml-2 text-green-700 hover:text-green-900" aria-label="Dismiss">
+          <span class="mdi mdi-close" aria-hidden="true"></span>
+        </button>
+      </div>
+    </div>
+    <script>
+      (function() {
+        var SAVE_MESSAGE = 'Settings saved. Your device will show the change at its next scheduled refresh. To see it right away, press the green button on the device.';
+        var toast = document.getElementById('settings-toast');
+        var toastMsg = document.getElementById('settings-toast-message');
+        var toastClose = document.getElementById('settings-toast-close');
+        var hideTimer = null;
+        function hideToast() { if (toast) { toast.style.display = 'none'; } }
+        window.tfShowSettingsToast = function(message) {
+          if (!toast || !toastMsg) { return; }
+          toastMsg.textContent = message || SAVE_MESSAGE;
+          toast.style.display = 'flex';
+          if (hideTimer) { clearTimeout(hideTimer); }
+          hideTimer = setTimeout(hideToast, 5000);
+        };
+        if (toastClose) { toastClose.addEventListener('click', hideToast); }
+        // Re-show the toast after a template-change reload.
+        try {
+          if (sessionStorage.getItem('tfSettingsSaved')) {
+            sessionStorage.removeItem('tfSettingsSaved');
+            window.tfShowSettingsToast(SAVE_MESSAGE);
+          }
+        } catch (err) {}
+      })();
+    </script>
+
+    <%# Device-scoped calendar creation modal + event card (cloud only). Rendered
+        outside the options form so their own forms aren't nested. %>
+    <% if lookup_context.template_exists?("create_calendar_modal", "devices", true) %>
+      <%= render "devices/create_calendar_modal" %>
+    <% end %>
+    <% if lookup_context.template_exists?("event_icons", "devices", true) %>
+      <% if hide_support_content %>
+        <div class="mb-3 rounded-lg border border-ink/10 bg-white p-4 text-gray-500">User has not provided support access.</div>
+      <% else %>
+        <%= render "devices/event_icons" %>
+      <% end %>
+    <% end %>
+
+    <% admin_context = !defined?(current_user) || current_user&.is_admin? %>
+    <% if admin_context %>
+      <div class="mb-3 rounded-lg border border-amber-400 bg-white">
+        <div class="border-b border-amber-400 bg-warning-subtle px-3 py-2">
+          <span>Admin</span>
+        </div>
+        <div class="p-4">
+          <%= form_with url: account_location_device_path(@account, @location, @device), method: :patch do %>
+            <label class="mb-2 flex items-center gap-2">
+              <% if @device.demo_mode_enabled? %>
+                <input type="checkbox" class="tf-check" checked onchange="this.form.submit()">
+              <% else %>
+                <input type="checkbox" class="tf-check" onchange="this.form.submit()">
+              <% end %>
+              <span>Demo mode</span>
+            </label>
+          <% end %>
+          <%= form_with url: update_configuration_account_location_device_path(@account, @location, @device), method: :patch do %>
+            <input type="hidden" name="key" value="show_device_id">
+            <input type="hidden" name="value" value="<%= @device.show_device_id? ? "false" : "true" %>">
+            <label class="mb-2 flex items-center gap-2">
+              <%= tag.input type: "checkbox", class: "tf-check", checked: @device.show_device_id?, onchange: "this.form.submit()" %>
+              <span>Show device ID</span>
+            </label>
+          <% end %>
+          <% if defined?(current_user) && current_user&.is_admin? %>
+            <%= form_with url: reassign_account_location_device_path(@account, @location, @device), method: :patch, class: "mb-3" do %>
+              <label class="mb-1 block text-sm" for="reassign-location">Reassign location</label>
+              <div class="flex">
+                <select name="target_location_id" id="reassign-location" class="tf-select rounded-r-none text-sm" required>
+                  <% Account.includes(:locations).order(:name).each do |acct| %>
+                    <% next if acct.locations.empty? %>
+                    <optgroup label="<%= acct.name %>">
+                      <% acct.locations.order(:name).each do |loc| %>
+                        <% if loc.id == @device.location_id %>
+                          <option value="<%= loc.id %>" selected><%= loc.display_address %> (current)</option>
+                        <% else %>
+                          <option value="<%= loc.id %>"><%= loc.display_address %></option>
+                        <% end %>
+                      <% end %>
+                    </optgroup>
+                  <% end %>
+                </select>
+                <%= submit_tag "Reassign", class: "tf-btn tf-btn-sm rounded-l-none bg-amber-500 text-white hover:bg-amber-600" %>
+              </div>
+              <p class="mb-0 mt-1 text-sm text-gray-500">Move this device to a different account or location.</p>
+            <% end %>
+            <div class="flex flex-wrap gap-2">
+              <% if respond_to?(:export_snapshot_admin_device_path) %>
+                <%= link_to "Export Debug Snapshot", export_snapshot_admin_device_path(@device), class: "tf-btn tf-btn-outline tf-btn-sm" %>
+              <% end %>
+              <% if @device.screenshotted? %>
+                <a href="<%= screenshot_account_location_device_path(@account, @location, @device) %>" class="tf-btn tf-btn-outline tf-btn-sm">Screenshot</a>
+                <button type="button" class="tf-btn tf-btn-outline tf-btn-sm" data-regenerate-screenshot>Regenerate</button>
+              <% end %>
+            </div>
+
+            <% if respond_to?(:admin_device_path) %>
+              <%# Billing %>
+              <div class="mt-3">
+                <label class="mb-1 block text-sm"><strong>Billing</strong></label>
+                <div class="mb-2 text-sm text-gray-500">
+                  <% if @device.billing_exempt? %>
+                    Exempt from billing - not counted toward the account's subscription.
+                  <% elsif @device.purchased? %>
+                    Purchased - billed on the account's subscription.
+                  <% elsif @device.trial_active? %>
+                    On free trial - <%= @device.trial_days_remaining %> day<%= "s" unless @device.trial_days_remaining == 1 %> left (ends <%= @device.trial_ends_on.strftime("%b %-d, %Y") %>).
+                  <% elsif @device.trial_ends_on.present? %>
+                    Trial ended <%= @device.trial_ends_on.strftime("%b %-d, %Y") %> - not purchased.
+                  <% else %>
+                    Not purchased.
+                  <% end %>
+                </div>
+                <%= form_with url: admin_device_path(@device), method: :patch, class: "mb-2 flex gap-1" do |f| %>
+                  <%= f.date_field "device[trial_ends_on]", value: @device.trial_ends_on, class: "tf-input-sm" %>
+                  <%= f.submit "Save", class: "tf-btn tf-btn-outline tf-btn-sm flex-shrink-0" %>
+                <% end %>
+                <div class="flex flex-wrap gap-2">
+                  <%= button_to(
+                    @device.purchased? ? "Mark not purchased" : "Mark purchased",
+                    admin_device_path(@device),
+                    method: :patch,
+                    params: {device: {purchased: @device.purchased? ? "0" : "1"}},
+                    class: "tf-btn tf-btn-outline tf-btn-sm"
+                  ) %>
+                  <%= button_to(
+                    @device.billing_exempt? ? "Remove exemption" : "Exempt from billing",
+                    admin_device_path(@device),
+                    method: :patch,
+                    params: {device: {billing_exempt: @device.billing_exempt? ? "0" : "1"}},
+                    class: "tf-btn tf-btn-outline tf-btn-sm"
+                  ) %>
+                </div>
+                <% if lookup_context.template_exists?("replace_billed_device", "devices", true) %>
+                  <%= render "devices/replace_billed_device", replacement_device: @device %>
+                <% end %>
+              </div>
+
+              <%# Battery %>
+              <div class="mt-3">
+                <label class="mb-1 block text-sm"><strong>Battery</strong></label>
+                <div>
+                  <% if @device.battery_level.present? %>
+                    <span class="<%= @device.battery_color_class %> text-lg">
+                      <i class="mdi mdi-<%= @device.battery_icon %>"></i>
+                      <%= @device.battery_level.to_i %>%
+                    </span>
+                    <span class="ml-1 tf-badge uppercase"><%= @device.battery_status %></span>
+                    <% if @device.charging? %><span class="ml-1 inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">Charging</span><% end %>
+                    <% if @device.low_battery_warning? %><span class="ml-1 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Recharge warning</span><% end %>
+                  <% else %>
+                    <span class="text-gray-500">No battery reading yet.</span>
+                  <% end %>
+                </div>
+                <div class="mt-1 text-sm text-gray-500">
+                  Last connected:
+                  <% if @device.last_connection_at %>
+                    <%= @device.last_connection_at.in_time_zone(@timezone).strftime("%b %-d ") %><%= DeviceTimeFormatter.format(@device.last_connection_at.in_time_zone(@timezone), time_format: @device.account&.time_format) %>
+                  <% else %>
+                    never
+                  <% end %>
+                  <% if @device.rssi.present? %> &middot; WiFi RSSI <%= @device.rssi %> dBm<% end %>
+                </div>
+                <% if @device.firmware_version.present? || @device.firmware_commit.present? %>
+                  <div class="mt-1 text-sm text-gray-500">
+                    Firmware:
+                    <% if @device.firmware_version.present? %><%= @device.firmware_version %><% end %>
+                    <% if @device.firmware_version.present? && @device.firmware_commit.present? %> &middot; <% end %>
+                    <% if @device.firmware_commit.present? %>SHA <code><%= @device.firmware_commit %></code><% end %>
+                  </div>
+                <% end %>
+              </div>
+
+              <% if defined?(current_user) && current_user&.is_admin? && lookup_context.template_exists?("admin_metrics", "devices", true) %>
+                <%= render "devices/admin_metrics", device: @device %>
+              <% end %>
+
+              <%# Audit Log %>
+              <div class="mt-3">
+                <label class="mb-1 block text-sm"><strong>Audit Log</strong></label>
+                <% if @audit_logs&.any? %>
+                  <div class="overflow-x-auto">
+                    <table class="tf-table">
+                      <thead>
+                        <tr>
+                          <th>Time</th>
+                          <th>Event</th>
+                          <th>Result</th>
+                          <th>Cache Age</th>
+                          <th>Duration</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <% @audit_logs.each do |log| %>
+                          <tr>
+                            <td class="whitespace-nowrap"><%= log.created_at.in_time_zone(@timezone).strftime("%b %-d ") %><%= DeviceTimeFormatter.format(log.created_at.in_time_zone(@timezone), time_format: @device.account&.time_format, seconds: true) %></td>
+                            <td><code><%= log.event_type %></code></td>
+                            <td>
+                              <% if log.result_type == "error" %>
+                                <span class="font-bold text-danger">error</span>
+                              <% elsif log.result_type %>
+                                <%= log.result_type %>
+                              <% end %>
+                            </td>
+                            <td>
+                              <% if log.metadata&.dig("cache_age_seconds") %>
+                                <% age = log.metadata["cache_age_seconds"] %>
+                                <span class="<%= "font-bold text-danger" if age > 900 %>">
+                                  <%= age %>s
+                                  <% if age > 60 %><small class="text-gray-500">(<%= (age / 60.0).round(1) %>m)</small><% end %>
+                                </span>
+                              <% end %>
+                            </td>
+                            <td>
+                              <% if log.metadata&.dig("duration_ms") %>
+                                <%= log.metadata["duration_ms"] %>ms
+                              <% end %>
+                            </td>
+                          </tr>
+                        <% end %>
+                      </tbody>
+                    </table>
+                  </div>
+                <% else %>
+                  <p class="mb-0 text-sm text-gray-500">No audit log entries yet.</p>
+                <% end %>
+              </div>
+            <% end %>
+          <% end %>
+          <% if @device.pairing_code_device? %>
+            <div class="mt-3">
+              <label class="mb-1 block text-sm"><strong>Pair or replace display</strong></label>
+              <%= render "devices/reconnect_form", device: @device %>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
+
+    <%# Token URL %>
+    <% if @device.visionect? && @device.display_key.present? %>
+      <div class="mb-3 rounded-lg border border-ink/10 bg-white" data-controller="collapse">
+        <div class="border-b border-ink/10 px-3 py-2">
+          <span>Token URL</span>
+        </div>
+        <div class="p-4">
+          <div class="mb-2 flex">
+            <input type="text" class="tf-input-sm rounded-r-none" value="<%= @device.token_device_url(host: request.base_url) %>" readonly id="token-url-<%= @device.id %>">
+            <button class="tf-btn tf-btn-outline tf-btn-sm rounded-l-none" type="button" onclick="var el=document.getElementById('token-url-<%= @device.id %>'); navigator.clipboard.writeText(el.value).then(function(){alert('Copied!')})">Copy</button>
+          </div>
+          <button type="button" class="tf-btn tf-btn-sm bg-amber-500 text-white hover:bg-amber-600" data-action="collapse#toggle" aria-expanded="false">Regenerate URL</button>
+          <div class="mt-2" data-collapse-target="content" hidden>
+            <%= form_with url: regenerate_tokens_account_location_device_path(@account, @location, @device), method: :post do %>
+              <p class="text-sm text-gray-500">This will invalidate the current token URL. Type <strong><%= @device.name %></strong> to confirm.</p>
+              <div class="flex">
+                <input type="text" name="name_confirmation" class="tf-input-sm rounded-r-none" placeholder="<%= @device.name %>" autocomplete="off" data-regen-input="<%= @device.id %>">
+                <%= submit_tag "Regenerate", class: "tf-btn tf-btn-sm rounded-l-none bg-amber-500 text-white hover:bg-amber-600", disabled: true, id: "regen-btn-#{@device.id}" %>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+      <script>
+        (function() {
+          var input = document.querySelector('[data-regen-input="<%= @device.id %>"]');
+          var btn = document.getElementById('regen-btn-<%= @device.id %>');
+          input.addEventListener('input', function() {
+            btn.disabled = input.value.toLowerCase().trim() !== '<%= @device.name.downcase.gsub("'", "\\'") %>'.toLowerCase();
+          });
+        })();
+      </script>
+    <% end %>
+
+    <%# Pair or replace display %>
+    <% if !admin_context && @device.pairing_code_device? %>
+      <div class="mb-3 rounded-lg border border-ink/10 bg-white">
+        <div class="border-b border-ink/10 px-3 py-2">
+          <span>Pair or replace display</span>
+        </div>
+        <div class="p-4">
+          <%= render "devices/reconnect_form", device: @device %>
+        </div>
+      </div>
+    <% end %>
+
+    <%# Danger zone %>
+    <div class="mb-3 rounded-lg border border-red-400 bg-white">
+      <div class="border-b border-red-400 px-3 py-2">
+          <span>Delete Device</span>
+      </div>
+      <div class="p-4">
+        <p class="text-sm text-gray-500">Type <strong><%= @device.name %></strong> to confirm deletion.</p>
+        <%= form_with url: account_location_device_path(@account, @location, @device), method: :delete do %>
+          <div class="flex">
+            <input type="text" name="name_confirmation" class="tf-input-sm rounded-r-none" placeholder="<%= @device.name %>" autocomplete="off" data-delete-input="<%= @device.id %>">
+            <%= submit_tag "Delete Device", class: "tf-btn tf-btn-danger tf-btn-sm rounded-l-none", disabled: true, id: "delete-btn-#{@device.id}" %>
+          </div>
+        <% end %>
+      </div>
+    </div>
+    <script>
+      (function() {
+        var input = document.querySelector('[data-delete-input="<%= @device.id %>"]');
+        var btn = document.getElementById('delete-btn-<%= @device.id %>');
+        input.addEventListener('input', function() {
+          btn.disabled = input.value.toLowerCase().trim() !== '<%= @device.name.downcase.gsub("'", "\\'") %>'.toLowerCase();
+        });
+      })();
+    </script>
+  </div>
+</div>

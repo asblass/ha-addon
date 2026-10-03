@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONFIG="config.json"
+CONFIG="timeframe/config.json"
 CHANGELOG="CHANGELOG.md"
 
 # Read current version
@@ -38,4 +38,4 @@ git push --tags
 
 echo ""
 echo "✓ Published v$version"
-echo "  https://github.com/timeframe/ha-addon/releases/tag/v$version"
+echo "  https://github.com/asblass/ha-addon/releases/tag/v$version"

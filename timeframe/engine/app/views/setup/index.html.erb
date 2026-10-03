@@ -1,0 +1,10 @@
+<% content_for :title, "Setup" %>
+<meta http-equiv="refresh" content="5">
+
+<div class="flex min-h-[70vh] items-center justify-center text-center">
+  <div>
+    <h1 class="text-3xl font-bold">Timeframe</h1>
+    <p class="mt-2">Enter this pairing code on your Timeframe dashboard:</p>
+    <p id="pairing-code" class="mt-4 text-7xl font-bold tracking-widest"><%= @pending_device.pairing_code %></p>
+  </div>
+</div>

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title><%= safe_join([content_for(:title).presence, "Timeframe"].compact, " · ") %></title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="256x256" href="/sun-angle.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#f1f3f5">
+    <%= stylesheet_link_tag "application_tailwind" %>
+    <link rel="stylesheet" href="/css/mdi/materialdesignicons.css">
+    <%= javascript_importmap_tags %>
+  </head>
+  <body class="bg-white font-body text-ink antialiased pb-24">
+    <%= render "layouts/bottom_nav" %>
+
+    <div class="mx-auto w-full max-w-[375px] px-3 pt-3">
+      <% flash.each do |key, value| %>
+        <div class="relative mb-3 flex items-center gap-3 rounded-md border py-3 pl-4 pr-10 <%= key == 'notice' ? 'border-green-200 bg-green-50 text-green-800' : 'border-red-200 bg-red-50 text-red-800' %>" role="alert" data-controller="alert">
+          <span class="mr-auto"><%= value %></span>
+          <button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 text-xl leading-none opacity-60 hover:opacity-100" data-action="alert#dismiss" aria-label="Close">&times;</button>
+        </div>
+      <% end %>
+
+      <%= yield %>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,8 @@
+# Timeframe Configuration
+# Copy this file to config/timeframe.yml and fill in your values.
+# Timeframe will auto-create a user and pull location/calendar data from HA.
+# home_assistant_token: your_long_lived_access_token
+# home_assistant_url: "http://homeassistant.local:8123"  # default
+# Units (temperature, wind speed, precipitation) are configured on the
+# Settings page in the web interface, seeded from your Home Assistant units.
+

@@ -1,0 +1,243 @@
+<div id="flash-overlay" data-morph-keep style="display:none; position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 100"></div>
+<style>
+  html { font-size: 46px }
+  body { padding: 0 2rem }
+  .hide-if-empty:empty {display: none;}
+</style>
+
+<div class="hide-if-empty" style="font-size: 1.75rem; position:absolute; left: 0; right: 0; bottom: 0; z-index: 5">
+  <div style="position: relative">
+    <div style="background:-webkit-gradient(linear,left top,left bottom,color-stop(0%, rgba(255,255,255,0)),color-stop(100%,rgba(255,255,255,1)));position: absolute;left: 0;right: 0; top: -2rem;height: 2rem;z-index: 5;"></div>
+  </div>
+  <% if @view_object[:minutely_precipitation_bars].present? %>
+    <%= render Devices::MinutelyPrecipitationComponent.new(view_object: @view_object) %>
+  <% end %>
+  <% if @view_object[:now_playing].present? %>
+    <div class="hide-if-empty" style="background-color: black; color: white; padding: 1rem 2rem; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">
+      <i class="mdi mdi-volume-high"></i>
+      <strong><%= @view_object[:now_playing][:artist] %></strong>
+      <% if @view_object[:now_playing][:track].present? %>
+        : <%= @view_object[:now_playing][:track] %>
+      <% end %>
+    </div>
+  <% end %>
+  <% if @view_object[:banner].present? %>
+    <div style="background-color: black; color: white; padding: 0.5rem 2rem;">
+      <div style="font-weight: 700; font-size: 1.25rem; line-height: 1.2;"><%= @view_object[:banner][:title] %></div>
+      <% if @view_object[:banner][:description].present? %>
+        <div style="font-size: 0.75rem; line-height: 1.3; margin-top: 0.25rem;"><%= @view_object[:banner][:description].html_safe %></div>
+      <% end %>
+    </div>
+  <% end %>
+</div>
+
+<div style="margin-top: 1.5rem;"></div>
+<div style="display: flex; justify-content: space-between; margin-bottom: .5rem;">
+  <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 1rem;">
+<%- Devices::StatusBarComponent.consolidate(@view_object[:top_left]).each do |group| -%>
+<span style="margin-right: .5rem;"><i class="mdi mdi-<%= group[:icon] %>" style="margin-right: .25rem;<%= " display: inline-block; transform: rotate(#{group[:rotation]}deg);" if group[:rotation] %>"></i><%= group[:labels].join(", ") %></span>
+<%- end -%>
+  </div>
+
+  <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+<%- Devices::StatusBarComponent.consolidate(@view_object[:top_right]).each do |group| -%>
+<span><i class="mdi mdi-<%= group[:icon] %>" style="margin-right: .25rem;<%= " display: inline-block; transform: rotate(#{group[:rotation]}deg);" if group[:rotation] %>"></i><%= group[:labels].join(", ") %></span>
+<%- end -%>
+  </div>
+</div>
+
+<hr style="margin: 1rem 0 1rem; border: none; background-color: #ccc; color: #ccc; height: 2px;">
+
+<div style="margin: 1rem 0 1.5rem; display: flex; justify-content: space-between; line-height: 2rem; font-size: 2rem;">
+  <div><span id="mira-date" data-morph-keep></span></div>
+  <div style="white-space: nowrap;">
+<%- Devices::StatusBarComponent.consolidate(@view_object[:weather_status]).each do |group| -%>
+<span style="margin-left: .5rem;"><i class="mdi mdi-<%= group[:icon] %>" style="<%= " display: inline-block; transform: rotate(#{group[:rotation]}deg);" if group[:rotation] %>"></i><%= group[:labels].join(", ") %></span>
+<%- end -%>
+  </div>
+</div>
+
+<% if @view_object.dig(:configuration, "show_current_day") != "false" %>
+  <div style="margin: 1rem 0 2rem; display: flex; justify-content: space-between; line-height: .7">
+    <div style="font-size: 5.5rem; margin-left: -.25rem"><span id="mira-clock" data-morph-keep></span></div>
+    <div style="font-size: 5.5rem; text-align: right;"><%= @view_object[:current_temperature] %></div>
+  </div>
+
+  <hr style="margin: 1rem 0 1rem; border: none; background-color: #ccc; color: #ccc; height: 2px;">
+<% end %>
+
+<div style="position: absolute; top: 15rem; bottom: 0; left: 2rem; right: 2rem; overflow: hidden;">
+  <%= render Devices::TimelineComponent.new(view_object: @view_object) %>
+</div>
+
+<script>
+(function() {
+  var timeZone = <%= ERB::Util.json_escape(@view_object[:current_time].time_zone.tzinfo.name.to_json).html_safe %>;
+  var timeFormat = <%= @view_object[:time_format].to_json %>;
+  var clockFormatter = new Intl.DateTimeFormat(undefined, {
+    timeZone: timeZone,
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: timeFormat === '24h' ? 'h23' : 'h12'
+  });
+  var dateFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timeZone,
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric'
+  });
+
+  function clockParts() {
+    var parts = {};
+    clockFormatter.formatToParts(new Date()).forEach(function(part) {
+      parts[part.type] = part.value;
+    });
+    return parts;
+  }
+
+  function updateClock() {
+    var parts = clockParts();
+    var timeStr = timeFormat === '24h'
+      ? parts.hour.padStart(2, '0') + ':' + parts.minute
+      : (parts.hour.length < 2 ? ' ' : '') + parts.hour + ':' + parts.minute + parts.dayPeriod.toLowerCase();
+    var el = document.getElementById('mira-clock');
+    if (el) el.textContent = timeStr;
+  }
+
+  function updateDate() {
+    var parts = {};
+    dateFormatter.formatToParts(new Date()).forEach(function(part) {
+      parts[part.type] = part.value;
+    });
+    var el = document.getElementById('mira-date');
+    if (el) el.textContent = parts.weekday + ', ' + parts.month + '. ' + parts.day;
+  }
+
+  function checkFlash() {
+    var parts = clockParts();
+    var overlay = document.getElementById('flash-overlay');
+    if (!overlay) return;
+    var minute = Number(parts.minute);
+    var second = Number(parts.second);
+    if (minute === 0 && second >= 10 && second < 18) {
+      overlay.style.display = 'block';
+      overlay.style.backgroundColor = ((second - 10) % 4 < 2) ? 'black' : 'white';
+    } else {
+      overlay.style.display = 'none';
+    }
+  }
+
+  function initMiraClock() {
+    updateClock();
+    updateDate();
+    checkFlash();
+  }
+
+  initMiraClock();
+  setInterval(function() { updateClock(); checkFlash(); }, 1000);
+  setInterval(updateDate, 60000);
+
+  window.initMiraClock = initMiraClock;
+
+  <% if @refresh && @device && @device_url %>
+    var knownDeployTime = '<%= DEPLOY_TIME %>';
+    var deviceUrl = '<%= @device_url %>';
+    var clientLogUrl = deviceUrl + '/client_log';
+
+    function tfLog(level, message) {
+      try {
+        fetch(clientLogUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ level: level, message: String(message).slice(0, 2000) }),
+          keepalive: true
+        }).catch(function() {});
+      } catch (e) {}
+    }
+    window.tfLog = tfLog;
+
+    window.addEventListener('error', function(e) {
+      tfLog('error', 'js: ' + (e.message || e.type) + (e.filename ? ' @ ' + e.filename + ':' + e.lineno : ''));
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      tfLog('error', 'promise: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+    });
+
+    var refreshInFlight = false;
+
+    function tfApplyHtml(html) {
+      if (window.tfMorph) {
+        var parsed = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html').body;
+        window.tfMorph(document.body, parsed);
+      } else {
+        document.body.innerHTML = html;
+        tfLog('warn', 'tfMorph missing; full innerHTML swap');
+      }
+      window.initMiraClock();
+      window.syncTimelineTimeColumns();
+    }
+
+    // Fetch the latest rendered content and morph it in. During a backend
+    // (Heroku) outage the request can fail or return an error page; in that case
+    // KEEP the last good content on screen and retry indefinitely with backoff
+    // (ramping up to every 30s) instead of blanking the display or morphing in
+    // an error page.
+    function tfRefresh(attempt) {
+      if (refreshInFlight && attempt === 0) return;
+      refreshInFlight = true;
+      var controller = typeof AbortController === 'function' ? new AbortController() : null;
+      var timeoutId = controller ? setTimeout(function() { controller.abort(); }, 15000) : null;
+      var fetchOptions = { cache: 'no-store' };
+      if (controller) fetchOptions.signal = controller.signal;
+      fetch(deviceUrl + '?layout=false', fetchOptions)
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.text();
+        })
+        .then(function(html) {
+          if (timeoutId) clearTimeout(timeoutId);
+          refreshInFlight = false;
+          if (html && html.trim().length) tfApplyHtml(html);
+        })
+        .catch(function(e) {
+          if (timeoutId) clearTimeout(timeoutId);
+          tfLog('error', 'refresh failed: ' + e);
+          console.error('[Timeframe] Refresh failed:', e);
+          setTimeout(function() { tfRefresh(attempt + 1); }, Math.min(30000, 5000 * (attempt + 1)));
+        });
+    }
+
+    var everConnected = false;
+    var cable = ActionCable.createConsumer();
+    cable.subscriptions.create(
+      { channel: 'DeviceChannel', device_id: '<%= @device.id %>' },
+      {
+        connected: function() {
+          // First connect: the page already has fresh server-rendered content.
+          // Re-connect (after a backend outage dropped the WebSocket): pull the
+          // latest content to catch up on any refreshes broadcast while offline.
+          if (everConnected) {
+            tfLog('info', 'reconnected; refreshing content');
+            tfRefresh(0);
+          }
+          everConnected = true;
+        },
+        disconnected: function() {
+          tfLog('warn', 'websocket disconnected');
+        },
+        received: function(data) {
+          if (data.deploy_time && data.deploy_time.toString() !== knownDeployTime) {
+            tfLog('info', 'deploy changed; full page reload');
+            window.location.reload();
+            return;
+          }
+          if (data.action === 'refresh') {
+            tfRefresh(0);
+          }
+        }
+      }
+    );
+  <% end %>
+})();
+</script>

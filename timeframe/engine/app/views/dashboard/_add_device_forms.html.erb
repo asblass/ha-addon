@@ -1,0 +1,75 @@
+<div class="w-full">
+  <div class="flex h-full flex-col rounded-lg border border-ink/10 bg-white">
+    <div class="border-b border-ink/10 px-3 py-2 font-semibold">
+      <span>Add Device</span>
+    </div>
+    <div class="p-4">
+      <%= form_tag(account_location_devices_path(account, location), method: :post, id: "add-device-form") do %>
+        <div class="mb-3">
+          <label class="tf-label">Name</label>
+          <input type="text" name="device_name" class="tf-input" placeholder="e.g. Kitchen Display" required data-field="name">
+        </div>
+        <% restrict_models = defined?(current_user) && current_user && !current_user.is_admin? %>
+        <% if restrict_models %>
+          <input type="hidden" name="device_model" value="reterminal_e1001" data-field="model">
+        <% else %>
+          <div class="mb-3">
+            <label class="tf-label">Device</label>
+            <select name="device_model" class="tf-select" required data-field="model">
+              <% Device::SUPPORTED_MODELS.sort_by { |_, info| info[:name].to_s.downcase }.each do |key, info| %>
+                <% if key == "reterminal_e1001" %>
+                  <option value="<%= key %>" selected><%= info[:name] %></option>
+                <% else %>
+                  <option value="<%= key %>"><%= info[:name] %></option>
+                <% end %>
+              <% end %>
+            </select>
+          </div>
+        <% end %>
+        <div class="mb-3" data-pairing-code style="display: none;">
+          <label class="tf-label">Pairing Code</label>
+          <input type="text" name="pairing_code" class="tf-input" placeholder="e.g. 123456" autocomplete="off" inputmode="numeric" minlength="6" maxlength="6" pattern="[0-9]{6}" data-field="pairing">
+          <% if defined?(current_user) && current_user&.is_admin? %>
+            <small class="text-sm text-gray-500">Optional for admins</small>
+          <% end %>
+        </div>
+        <p class="text-sm text-gray-500" data-setup-note style="display: none;">On your Boox device, visit <code><%= request.base_url %>/pair</code> to get a pairing code.</p>
+        <%= submit_tag "Add Device", class: "tf-btn tf-btn-primary w-full", disabled: true, id: "add-device-btn" %>
+      <% end %>
+    </div>
+  </div>
+</div>
+<script>
+(function() {
+  var form = document.getElementById('add-device-form');
+  var nameInput = form.querySelector('[data-field="name"]');
+  var modelSelect = form.querySelector('[data-field="model"]');
+  var pairingInput = form.querySelector('[data-field="pairing"]');
+  var pairingWrap = form.querySelector('[data-pairing-code]');
+  var setupNote = form.querySelector('[data-setup-note]');
+  var btn = document.getElementById('add-device-btn');
+
+  function needsPairing() {
+    return modelSelect.value !== '' && modelSelect.value !== 'visionect_13';
+  }
+
+  <% admin = defined?(current_user) && current_user&.is_admin? %>
+  var isAdmin = <%= admin ? "true" : "false" %>;
+
+  function updateState() {
+    var showPairing = needsPairing();
+    pairingWrap.style.display = showPairing ? '' : 'none';
+    pairingInput.required = showPairing && !isAdmin;
+    setupNote.style.display = (modelSelect.value === 'boox_mira_pro' || modelSelect.value === 'boox_mira') ? '' : 'none';
+
+    var valid = nameInput.value.trim() !== '' && modelSelect.value !== '';
+    if (showPairing && !isAdmin) valid = valid && /^[0-9]{6}$/.test(pairingInput.value);
+    if (showPairing && isAdmin && pairingInput.value !== '') valid = valid && /^[0-9]{6}$/.test(pairingInput.value);
+    btn.disabled = !valid;
+  }
+
+  nameInput.addEventListener('input', updateState);
+  modelSelect.addEventListener('change', updateState);
+  pairingInput.addEventListener('input', updateState);
+})();
+</script>

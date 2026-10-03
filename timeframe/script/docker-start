@@ -1,0 +1,79 @@
+#!/bin/bash
+set -e
+
+PG_VERSION=17
+PG_CLUSTER=main
+PG_DATA="/data/pgdata"
+
+# Ensure a stable SECRET_KEY_BASE so encrypted columns and sessions survive
+# restarts. An explicit env var always wins. Otherwise persist a key to the
+# data volume: generate a fresh secure key for new installs, but keep the
+# legacy default for databases created before this existed so their already
+# encrypted data stays decryptable. Must run before the cluster is created
+# below, since it checks whether the data dir predates this version.
+if [ -z "${SECRET_KEY_BASE:-}" ]; then
+  SECRET_FILE="/data/.secret_key_base"
+  mkdir -p /data
+  if [ ! -f "$SECRET_FILE" ]; then
+    if [ -f "$PG_DATA/PG_VERSION" ]; then
+      printf 'foo' > "$SECRET_FILE"
+    else
+      ruby -rsecurerandom -e 'print SecureRandom.hex(64)' > "$SECRET_FILE"
+    fi
+  fi
+  SECRET_KEY_BASE="$(cat "$SECRET_FILE")"
+  export SECRET_KEY_BASE
+fi
+
+# Move Postgres data to persistent storage on first run
+if [ ! -f "$PG_DATA/PG_VERSION" ]; then
+  mkdir -p "$PG_DATA"
+  # Drop the default cluster and recreate with persistent data dir
+  pg_dropcluster --stop $PG_VERSION $PG_CLUSTER 2>/dev/null || true
+  pg_createcluster -d "$PG_DATA" $PG_VERSION $PG_CLUSTER
+fi
+
+# Ensure cluster config points to persistent data
+if [ -f "/etc/postgresql/$PG_VERSION/$PG_CLUSTER/postgresql.conf" ]; then
+  sed -i "s|^data_directory.*|data_directory = '$PG_DATA'|" "/etc/postgresql/$PG_VERSION/$PG_CLUSTER/postgresql.conf"
+fi
+
+# Allow local connections without password
+PG_HBA="/etc/postgresql/$PG_VERSION/$PG_CLUSTER/pg_hba.conf"
+if [ -f "$PG_HBA" ]; then
+  echo "local all all trust" > "$PG_HBA"
+  echo "host all all 127.0.0.1/32 trust" >> "$PG_HBA"
+  echo "host all all ::1/128 trust" >> "$PG_HBA"
+fi
+
+chown -R postgres:postgres "$PG_DATA"
+
+# Start PostgreSQL
+pg_ctlcluster $PG_VERSION $PG_CLUSTER start -- -w
+
+# Create database if it doesn't exist
+su postgres -c "createdb timeframe_production" 2>/dev/null || true
+
+# Migrate database
+export DATABASE_URL="postgres://postgres@localhost/timeframe_production"
+export RAILS_LOG_TO_STDOUT=1
+
+SCHEMA_VERSION=$(sed -n 's/.*define(version: \([0-9]*\)).*/\1/p' db/schema.rb)
+VERSION_FILE="/data/.schema_version"
+CURRENT_VERSION=$(cat "$VERSION_FILE" 2>/dev/null || echo "0")
+
+if [ "$CURRENT_VERSION" != "$SCHEMA_VERSION" ]; then
+  echo "Schema version changed ($CURRENT_VERSION -> $SCHEMA_VERSION), rebuilding database structure..."
+  # Dump existing data, reload schema, restore data
+  su postgres -c "pg_dump -Fc --data-only timeframe_production" > /tmp/data.dump 2>/dev/null || true
+  DISABLE_DATABASE_ENVIRONMENT_CHECK=1 bundle exec rails db:schema:load
+  su postgres -c "pg_restore --data-only --disable-triggers -d timeframe_production" < /tmp/data.dump 2>/dev/null || true
+  rm -f /tmp/data.dump
+  echo "$SCHEMA_VERSION" > "$VERSION_FILE"
+  echo "Schema rebuild complete."
+else
+  bundle exec rails db:prepare
+fi
+
+# Start Puma
+exec bundle exec puma -C config/puma.rb
