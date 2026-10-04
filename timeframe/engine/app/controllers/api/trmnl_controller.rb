@@ -77,6 +77,15 @@ module Api
           pd.model = PendingDevice.model_key_for_firmware(request.headers["Model"])
         end
         pending.keep_alive!
+        Rails.logger.warn(
+          "[PAIRING DEBUG] " \
+          "id=#{pending.id.inspect} " \
+          "pairing_code=#{pending.pairing_code.inspect} " \
+          "friendly_id=#{pending.friendly_id.inspect} " \
+          "mac_address=#{pending.mac_address.inspect} " \
+          "created_at=#{pending.created_at.inspect} " \
+          "updated_at=#{pending.updated_at.inspect}"
+        )
         render json: {status: 202}, status: :ok
         return
       end
