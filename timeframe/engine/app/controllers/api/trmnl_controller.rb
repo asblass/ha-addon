@@ -146,12 +146,26 @@ module Api
 
       RefreshDeviceScreenshotJob.set(wait: (@device.refresh_rate - 60).seconds).perform_later(@device.id)
 
+      filename = "display-#{@device.cached_image_at}.png"
+      image_url = @device.signed_screenshot_url(host: request.base_url)
+      image_url_for_log = image_url.sub(%r{(/signed_screenshot/)[^/?]+}, '\1[REDACTED]')
+      refresh_rate = @device.refresh_rate
+      Rails.logger.warn(
+        "[DISPLAY DEBUG] " \
+        "device_id=#{@device.id.inspect} " \
+        "status=0 " \
+        "filename=#{filename.inspect} " \
+        "image_url=#{image_url_for_log.inspect} " \
+        "image_url_timeout=0 " \
+        "refresh_rate=#{refresh_rate.inspect}"
+      )
+
       render json: {
         status: 0,
-        filename: "display-#{@device.cached_image_at}.png",
-        image_url: @device.signed_screenshot_url(host: request.base_url),
+        filename: filename,
+        image_url: image_url,
         image_url_timeout: 0,
-        refresh_rate: @device.refresh_rate,
+        refresh_rate: refresh_rate,
         reset_firmware: false,
         special_function: "sleep",
         update_firmware: false,
