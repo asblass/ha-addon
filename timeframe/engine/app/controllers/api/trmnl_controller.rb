@@ -27,6 +27,36 @@ module Api
       return head :bad_request if mac_address.blank?
 
       device = Device.find_by(mac_address: mac_address)
+      access_token = request.env["HTTP_ACCESS_TOKEN"].presence || request.env["ACCESS_TOKEN"].presence
+      access_token_valid = device.present? && access_token.present? && device.authenticate_api_key(access_token)
+      authorization_present = request.get_header("HTTP_AUTHORIZATION").present?
+      relevant_headers = %w[
+        ID Model ACCESS_TOKEN Authorization FW-Version FW-Commit Battery-Voltage
+        Percent-Charged Battery-Charging USB-Connected RSSI
+      ]
+      relevant_header_names = relevant_headers.select do |name|
+        case name
+        when "ACCESS_TOKEN"
+          access_token.present?
+        when "Authorization"
+          authorization_present
+        else
+          request.headers[name].present?
+        end
+      end
+      Rails.logger.warn(
+        "[SETUP DEBUG] " \
+        "mac=#{mac_address.inspect} " \
+        "existing_device_id=#{device&.id.inspect} " \
+        "model=#{device&.model.inspect} " \
+        "authorization_present=#{authorization_present} " \
+        "access_token_present=#{access_token.present?} " \
+        "access_token_valid=#{access_token_valid} " \
+        "trmnl_headers=#{relevant_header_names.inspect} " \
+        "user_agent=#{request.user_agent.inspect} " \
+        "method=#{request.request_method.inspect} " \
+        "path=#{request.path.inspect}"
+      )
       # A device only calls /api/setup when it has no stored credentials — it is
       # brand new or has been factory reset. If a device record already exists
       # for this hardware's MAC, the hardware was reset, so detach it (rather
